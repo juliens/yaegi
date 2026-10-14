@@ -1499,7 +1499,7 @@ func (interp *Interpreter) cfg(root *node, sc *scope, importPath, pkgName string
 			init, body := n.child[0], n.child[1]
 			n.start = init.start
 			init.tnext = body.start
-			body.tnext = n.start
+			body.tnext = body.start
 			sc = sc.pop()
 
 		case forStmt2: // for cond {}
