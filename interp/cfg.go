@@ -1415,8 +1415,8 @@ func (interp *Interpreter) cfg(root *node, sc *scope, importPath, pkgName string
 			switch {
 			case typeSwichAssign(n) && len(n.child) > 1:
 				n.start = n.child[1].start
-			case len(n.child) == 0:
-				// Empty case body: jump to switch node (exit node).
+			case len(n.child) == 0, typeSwichAssign(n):
+				// Empty case body (or holding only the type switch guard var): jump to switch node (exit node).
 				n.start = n.anc.anc.anc
 			default:
 				n.start = n.child[0].start
