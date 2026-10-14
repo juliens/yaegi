@@ -2508,12 +2508,23 @@ func getVars(n *node) (vars []*node) {
 func genGlobalVarDecl(nodes []*node, sc *scope) (*node, error) {
 	varNode := &node{kind: varDecl, action: aNop, gen: nop}
 
-	deps := map[*node][]*node{}
+	inited := map[*node]bool{}
+	pending := map[*node]bool{}
 	for _, n := range nodes {
-		deps[n] = getVarDependencies(n, sc)
+		pending[n] = true
 	}
 
-	inited := map[*node]bool{}
+	deps := map[*node][]*node{}
+	for _, n := range nodes {
+		for _, d := range getVarDependencies(n, sc) {
+			// Variables declared outside of the current set of nodes (e.g. in
+			// a previous evaluation) are already initialized.
+			if pending[d] {
+				deps[n] = append(deps[n], d)
+			}
+		}
+	}
+
 	revisit := []*node{}
 	for {
 		for _, n := range nodes {

@@ -826,9 +826,38 @@ func nodeType2(interp *Interpreter, sc *scope, n *node, seen []*node) (t *itype,
 			}
 			break
 		}
-		switch lt.cat {
+		bt := lt
+		for bt.cat == linkedT {
+			bt = bt.val
+		}
+		switch bt.cat {
 		case arrayT, mapT, sliceT, variadicT:
-			t = lt.val
+			t = bt.val
+		case ptrT:
+			// Indexing a pointer to an array.
+			at := bt.val
+			for at.cat == linkedT {
+				at = at.val
+			}
+			switch {
+			case at.cat == arrayT:
+				t = at.val
+			case at.cat == valueT && at.rtype.Kind() == reflect.Array:
+				t = valueTOf(at.rtype.Elem())
+			}
+		case stringT:
+			t = sc.getType("byte")
+		case valueT:
+			switch rt := bt.rtype; rt.Kind() {
+			case reflect.String:
+				t = sc.getType("byte")
+			case reflect.Array, reflect.Map, reflect.Slice:
+				t = valueTOf(rt.Elem())
+			case reflect.Pointer:
+				if rt.Elem().Kind() == reflect.Array {
+					t = valueTOf(rt.Elem().Elem())
+				}
+			}
 		case genericT:
 			t1, err := nodeType2(interp, sc, n.child[1], seen)
 			if err != nil {
