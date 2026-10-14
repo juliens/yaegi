@@ -1,8 +1,10 @@
 package interp
 
 import (
+	"fmt"
 	"go/ast"
 	"go/build"
+	"go/build/constraint"
 	"go/parser"
 	"path"
 	"strconv"
@@ -10,7 +12,9 @@ import (
 )
 
 // buildOk returns true if a file or script matches build constraints
-// as specified in https://golang.org/pkg/go/build/#hdr-Build_Constraints.
+// as specified in https://pkg.go.dev/cmd/go#hdr-Build_constraints.
+// Both "//go:build" and legacy "// +build" lines are supported.
+// If a "//go:build" line is present, "// +build" lines are ignored.
 // An error from parser is returned as well.
 func (interp *Interpreter) buildOk(ctx *build.Context, name, src string) (bool, error) {
 	// Extract comments before the first clause
@@ -18,70 +22,70 @@ func (interp *Interpreter) buildOk(ctx *build.Context, name, src string) (bool, 
 	if err != nil {
 		return false, err
 	}
+
+	var goBuild constraint.Expr
+	var plusBuild []constraint.Expr
 	for _, g := range f.Comments {
-		// in file, evaluate the AND of multiple line build constraints
-		for _, line := range strings.Split(strings.TrimSpace(g.Text()), "\n") {
-			if !buildLineOk(ctx, line) {
+		for _, c := range g.List {
+			// Build constraints are only valid in the file header.
+			if c.Pos() >= f.Package {
+				break
+			}
+			switch {
+			case constraint.IsGoBuild(c.Text):
+				if goBuild != nil {
+					return false, fmt.Errorf("%s: multiple //go:build comments", interp.fset.Position(c.Pos()))
+				}
+				x, err := constraint.Parse(c.Text)
+				if err != nil {
+					return false, fmt.Errorf("%s: parsing //go:build line: %w", interp.fset.Position(c.Pos()), err)
+				}
+				goBuild = x
+			case constraint.IsPlusBuild(c.Text):
+				// As in go/build, invalid "// +build" lines are ignored.
+				if x, err := constraint.Parse(c.Text); err == nil {
+					plusBuild = append(plusBuild, x)
+				}
+			}
+		}
+	}
+
+	tagOk := func(tag string) bool { return buildTagOk(ctx, tag) }
+	if goBuild != nil {
+		if !goBuild.Eval(tagOk) {
+			return false, nil
+		}
+	} else {
+		// In file, evaluate the AND of multiple "// +build" lines.
+		for _, x := range plusBuild {
+			if !x.Eval(tagOk) {
 				return false, nil
 			}
 		}
 	}
+
 	setYaegiTags(ctx, f.Comments)
 	return true, nil
 }
 
-// buildLineOk returns true if line is not a build constraint or
-// if build constraint is satisfied.
-func buildLineOk(ctx *build.Context, line string) (ok bool) {
-	if len(line) < 7 || line[:7] != "+build " {
-		return true
-	}
-	// In line, evaluate the OR of space-separated options
-	options := strings.Split(strings.TrimSpace(line[6:]), " ")
-	for _, o := range options {
-		if ok = buildOptionOk(ctx, o); ok {
-			break
-		}
-	}
-	return ok
-}
-
-// buildOptionOk return true if all comma separated tags match, false otherwise.
-func buildOptionOk(ctx *build.Context, tag string) bool {
-	// in option, evaluate the AND of individual tags
-	for _, t := range strings.Split(tag, ",") {
-		if !buildTagOk(ctx, t) {
-			return false
-		}
-	}
-	return true
-}
-
-// buildTagOk returns true if a build tag matches, false otherwise
-// if first character is !, result is negated.
-func buildTagOk(ctx *build.Context, s string) (r bool) {
-	not := s[0] == '!'
-	if not {
-		s = s[1:]
-	}
+// buildTagOk returns true if a build tag matches, false otherwise.
+func buildTagOk(ctx *build.Context, s string) bool {
 	switch {
 	case contains(ctx.BuildTags, s):
-		r = true
+		return true
 	case s == ctx.GOOS:
-		r = true
+		return true
 	case s == ctx.GOARCH:
-		r = true
+		return true
 	case len(s) > 4 && s[:4] == "go1.":
-		if n, err := strconv.Atoi(s[4:]); err != nil {
-			r = false
-		} else {
-			r = goMinorVersion(ctx) >= n
+		n, err := strconv.Atoi(s[4:])
+		if err != nil {
+			return false
 		}
+		return goMinorVersion(ctx) >= n
+	default:
+		return false
 	}
-	if not {
-		r = !r
-	}
-	return
 }
 
 // setYaegiTags scans a comment group for "yaegi:tags tag1 tag2 ..." lines
