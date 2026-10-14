@@ -435,6 +435,30 @@ func (interp *Interpreter) ast(f ast.Node) (string, *node, error) {
 	var st nodestack
 	pkgName := "main"
 
+	// addCaseBody splits the children of a case clause in condition and body nodes to desambiguify the AST.
+	// It must be called once all the case clause children are collected, even if there are none.
+	addCaseBody := func(clause *node, nlist int, pos token.Pos) {
+		var i interface{}
+		nindex := atomic.AddInt64(&interp.nindex, 1)
+		body := &node{anc: clause, interp: interp, index: nindex, pos: pos, kind: caseBody, action: aNop, val: &i, gen: nop}
+
+		if ts := clause.anc.anc; ts.kind == typeSwitch && ts.child[1].action == aAssign {
+			// In type switch clause, if a switch guard is assigned, duplicate the switch guard symbol
+			// in each clause body, so a different guard type can be set in each clause
+			name := ts.child[1].child[0].ident
+			nindex = atomic.AddInt64(&interp.nindex, 1)
+			gn := &node{anc: body, interp: interp, ident: name, index: nindex, pos: pos, kind: identExpr, action: aNop, val: &i, gen: nop}
+			body.child = append(body.child, gn)
+		}
+
+		// Add regular body children
+		body.child = append(body.child, clause.child[nlist:]...)
+		for i := range body.child {
+			body.child[i].anc = body
+		}
+		clause.child = append(clause.child[:nlist], body)
+	}
+
 	addChild := func(root **node, anc astNode, pos token.Pos, kind nkind, act action) *node {
 		var i interface{}
 		nindex := atomic.AddInt64(&interp.nindex, 1)
@@ -448,25 +472,7 @@ func (interp *Interpreter) ast(f ast.Node) (string, *node, error) {
 				ancAst := anc.ast.(*ast.CaseClause)
 				if len(ancAst.List)+len(ancAst.Body) == len(anc.node.child) {
 					// All case clause children are collected.
-					// Split children in condition and body nodes to desambiguify the AST.
-					nindex = atomic.AddInt64(&interp.nindex, 1)
-					body := &node{anc: anc.node, interp: interp, index: nindex, pos: pos, kind: caseBody, action: aNop, val: &i, gen: nop}
-
-					if ts := anc.node.anc.anc; ts.kind == typeSwitch && ts.child[1].action == aAssign {
-						// In type switch clause, if a switch guard is assigned, duplicate the switch guard symbol
-						// in each clause body, so a different guard type can be set in each clause
-						name := ts.child[1].child[0].ident
-						nindex = atomic.AddInt64(&interp.nindex, 1)
-						gn := &node{anc: body, interp: interp, ident: name, index: nindex, pos: pos, kind: identExpr, action: aNop, val: &i, gen: nop}
-						body.child = append(body.child, gn)
-					}
-
-					// Add regular body children
-					body.child = append(body.child, anc.node.child[len(ancAst.List):]...)
-					for i := range body.child {
-						body.child[i].anc = body
-					}
-					anc.node.child = append(anc.node.child[:len(ancAst.List)], body)
+					addCaseBody(anc.node, len(ancAst.List), pos)
 				}
 			}
 		}
@@ -637,7 +643,12 @@ func (interp *Interpreter) ast(f ast.Node) (string, *node, error) {
 			st.push(addChild(&root, anc, pos, callExpr, action), nod)
 
 		case *ast.CaseClause:
-			st.push(addChild(&root, anc, pos, caseClause, aCase), nod)
+			n := addChild(&root, anc, pos, caseClause, aCase)
+			if len(a.List)+len(a.Body) == 0 {
+				// Empty default clause: no child will trigger the body split, do it now.
+				addCaseBody(n, 0, pos)
+			}
+			st.push(n, nod)
 
 		case *ast.ChanType:
 			switch a.Dir {
