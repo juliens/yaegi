@@ -403,6 +403,7 @@ const (
 	bltnAlignof  = "unsafe.Alignof"
 	bltnAppend   = "append"
 	bltnCap      = "cap"
+	bltnClear    = "clear"
 	bltnClose    = "close"
 	bltnComplex  = "complex"
 	bltnImag     = "imag"
@@ -410,6 +411,8 @@ const (
 	bltnDelete   = "delete"
 	bltnLen      = "len"
 	bltnMake     = "make"
+	bltnMax      = "max"
+	bltnMin      = "min"
 	bltnNew      = "new"
 	bltnOffsetof = "unsafe.Offsetof"
 	bltnPanic    = "panic"
@@ -458,6 +461,7 @@ func initUniverse() *scope {
 		// predefined Go builtins
 		bltnAppend:  {kind: bltnSym, builtin: _append},
 		bltnCap:     {kind: bltnSym, builtin: _cap},
+		bltnClear:   {kind: bltnSym, builtin: _clear},
 		bltnClose:   {kind: bltnSym, builtin: _close},
 		bltnComplex: {kind: bltnSym, builtin: _complex},
 		bltnImag:    {kind: bltnSym, builtin: _imag},
@@ -465,6 +469,8 @@ func initUniverse() *scope {
 		bltnDelete:  {kind: bltnSym, builtin: _delete},
 		bltnLen:     {kind: bltnSym, builtin: _len},
 		bltnMake:    {kind: bltnSym, builtin: _make},
+		bltnMax:     {kind: bltnSym, builtin: _minMax},
+		bltnMin:     {kind: bltnSym, builtin: _minMax},
 		bltnNew:     {kind: bltnSym, builtin: _new},
 		bltnPanic:   {kind: bltnSym, builtin: _panic},
 		bltnPrint:   {kind: bltnSym, builtin: _print},
