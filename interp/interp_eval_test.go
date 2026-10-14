@@ -95,6 +95,17 @@ func TestOpVarConst(t *testing.T) {
 	})
 }
 
+func TestEvalGlobalVarDeps(t *testing.T) {
+	i := interp.New(interp.Options{})
+	runTests(t, i, []testCase{
+		{pre: func() { eval(t, i, `var k = "asdf"`); eval(t, i, "var m = k[0]") }, src: "m", res: "97"},
+		{pre: func() { eval(t, i, "var n = k") }, src: "n", res: "asdf"},
+		{pre: func() { eval(t, i, "var o = len(k)") }, src: "o", res: "4"},
+		{src: "bar := baz", err: "1:35: undefined: baz"},
+		{src: "var bar = baz", err: "1:24: undefined: baz"},
+	})
+}
+
 func TestEvalStar(t *testing.T) {
 	i := interp.New(interp.Options{})
 	runTests(t, i, []testCase{

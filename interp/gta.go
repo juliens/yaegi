@@ -418,7 +418,71 @@ func (interp *Interpreter) gtaRetry(nodes []*node, importPath, pkgName string) e
 				return err
 			}
 		}
+		if err := undefinedIdent(revisit); err != nil {
+			return err
+		}
 		return n.cfgErrorf("constant definition loop")
+	}
+	return nil
+}
+
+// undefinedIdent returns an error for the first identifier used in the
+// right-hand side of a pending global definition which is neither in scope
+// nor declared by one of the pending nodes, as such a definition can never be
+// resolved.
+func undefinedIdent(nodes []*node) error {
+	declared := map[string]bool{}
+	for _, n := range nodes {
+		switch n.kind {
+		case defineStmt:
+			for _, c := range n.child[:n.nleft] {
+				declared[c.ident] = true
+			}
+		case typeSpec, typeSpecAssign, funcDecl:
+			declared[n.child[0].ident] = true
+		}
+	}
+
+	for _, n := range nodes {
+		if n.kind != defineStmt || n.nright == 0 {
+			continue
+		}
+		for _, src := range n.child[len(n.child)-n.nright:] {
+			if u := findUndefined(src, n.scope, declared); u != nil {
+				return u.cfgErrorf("undefined: %s", u.ident)
+			}
+		}
+	}
+	return nil
+}
+
+// findUndefined returns the first identifier in the expression n which is
+// neither in scope sc nor in declared. Subtrees which may introduce local
+// names (function literals, type literals, composite literal keys) are skipped.
+func findUndefined(n *node, sc *scope, declared map[string]bool) *node {
+	switch n.kind {
+	case identExpr:
+		if isBlank(n) || declared[n.ident] {
+			return nil
+		}
+		sym, _, found := sc.lookup(n.ident)
+		// An unknown identifier may have been registered by nodeType as an
+		// incomplete placeholder type, waiting for a later declaration.
+		if !found || sym.kind == typeSym && sym.typ != nil && sym.typ.incomplete {
+			return n
+		}
+		return nil
+	case funcLit, funcType, interfaceType, structType:
+		return nil
+	case selectorExpr:
+		return findUndefined(n.child[0], sc, declared)
+	case keyValueExpr:
+		return findUndefined(n.child[1], sc, declared)
+	}
+	for _, c := range n.child {
+		if u := findUndefined(c, sc, declared); u != nil {
+			return u
+		}
 	}
 	return nil
 }

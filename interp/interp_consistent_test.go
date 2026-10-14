@@ -65,6 +65,7 @@ func TestInterpConsistencyBuild(t *testing.T) {
 			file.Name() == "issue-1093.go" || // expect error
 			file.Name() == "issue-1276.go" || // expect error
 			file.Name() == "issue-1330.go" || // expect error
+			file.Name() == "issue-1437e.go" || // expect error
 			file.Name() == "op1.go" || // expect error
 			file.Name() == "op7.go" || // expect error
 			file.Name() == "op9.go" || // expect error
@@ -268,6 +269,11 @@ func TestInterpErrorConsistency(t *testing.T) {
 			fileName:       "issue-1093.go",
 			expectedInterp: "9:6: cannot use type untyped string as type int in assignment",
 			expectedExec:   `9:6: cannot use "a" + b() (value of type string)`,
+		},
+		{
+			fileName:       "issue-1437e.go",
+			expectedInterp: "3:11: undefined: baz",
+			expectedExec:   "3:11: undefined: baz",
 		},
 		{
 			fileName:       "op1.go",
