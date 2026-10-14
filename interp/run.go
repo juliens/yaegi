@@ -1024,9 +1024,9 @@ func genFunctionWrapper(n *node) func(*frame) reflect.Value {
 					sk = src.Kind()
 				}
 				switch {
-				case sk == reflect.Ptr && dk != reflect.Ptr:
+				case sk == reflect.Pointer && dk != reflect.Pointer:
 					dest.Set(src.Elem())
-				case sk != reflect.Ptr && dk == reflect.Ptr:
+				case sk != reflect.Pointer && dk == reflect.Pointer:
 					dest.Set(src.Addr())
 				default:
 					dest.Set(src)
@@ -1098,7 +1098,7 @@ func genInterfaceWrapper(n *node, typ reflect.Type) func(*frame) reflect.Value {
 			return v
 		}
 		switch v.Kind() {
-		case reflect.Chan, reflect.Func, reflect.Interface, reflect.Map, reflect.Ptr, reflect.Slice:
+		case reflect.Chan, reflect.Func, reflect.Interface, reflect.Map, reflect.Pointer, reflect.Slice:
 			if v.IsNil() {
 				return reflect.New(typ).Elem()
 			}
@@ -1151,7 +1151,7 @@ func methodByName(value reflect.Value, name string, index []int) (v reflect.Valu
 	if v = value.MethodByName(name); v.IsValid() {
 		return
 	}
-	for value.Kind() == reflect.Ptr {
+	for value.Kind() == reflect.Pointer {
 		value = value.Elem()
 		if checkFieldIndex(value.Type(), index) {
 			value = value.FieldByIndex(index)
@@ -1168,7 +1168,7 @@ func checkFieldIndex(typ reflect.Type, index []int) bool {
 		return false
 	}
 	t := typ
-	for t.Kind() == reflect.Ptr {
+	for t.Kind() == reflect.Pointer {
 		t = t.Elem()
 	}
 	if t.Kind() != reflect.Struct {
@@ -1959,7 +1959,7 @@ func getMethod(n *node) {
 	next := getExec(n.tnext)
 
 	n.exec = func(f *frame) bltn {
-		nod := *(n.val.(*node))
+		nod := *n.val.(*node)
 		nod.val = &nod
 		nod.recv = n.recv
 		getFrame(f, l).data[i] = genFuncValue(&nod)(f)
@@ -1980,7 +1980,7 @@ func getMethodByName(n *node) {
 		val, ok := value0(f).Interface().(valueInterface)
 		if !ok {
 			// Search the first embedded valueInterface.
-			for val0.Kind() == reflect.Ptr {
+			for val0.Kind() == reflect.Pointer {
 				val0 = val0.Elem()
 			}
 			for i := 0; i < val0.NumField(); i++ {
@@ -2054,7 +2054,7 @@ func lookupMethodValue(val valueInterface, name string) (r reflect.Value, m *nod
 		return
 	}
 	v := val.value
-	for v.Type().Kind() == reflect.Ptr {
+	for v.Type().Kind() == reflect.Pointer {
 		v = v.Elem()
 	}
 	nf := v.NumField()
@@ -2142,7 +2142,7 @@ func getIndexSeqField(n *node) {
 
 	if n.fnext != nil {
 		fnext := getExec(n.fnext)
-		if n.child[0].typ.TypeOf().Kind() == reflect.Ptr {
+		if n.child[0].typ.TypeOf().Kind() == reflect.Pointer {
 			n.exec = func(f *frame) bltn {
 				r := value(f).Elem().FieldByIndex(index)
 				getFrame(f, l).data[i] = r
@@ -2162,7 +2162,7 @@ func getIndexSeqField(n *node) {
 			}
 		}
 	} else {
-		if n.child[0].typ.TypeOf().Kind() == reflect.Ptr {
+		if n.child[0].typ.TypeOf().Kind() == reflect.Pointer {
 			n.exec = func(f *frame) bltn {
 				getFrame(f, l).data[i] = value(f).Elem().FieldByIndex(index)
 				return tnext
@@ -2185,7 +2185,7 @@ func getIndexSeqPtrMethod(n *node) {
 	l := n.level
 	next := getExec(n.tnext)
 
-	if n.child[0].typ.TypeOf().Kind() == reflect.Ptr {
+	if n.child[0].typ.TypeOf().Kind() == reflect.Pointer {
 		if len(fi) == 0 {
 			n.exec = func(f *frame) bltn {
 				getFrame(f, l).data[i] = value(f).Method(mi)
@@ -2221,7 +2221,7 @@ func getIndexSeqMethod(n *node) {
 	l := n.level
 	next := getExec(n.tnext)
 
-	if n.child[0].typ.TypeOf().Kind() == reflect.Ptr {
+	if n.child[0].typ.TypeOf().Kind() == reflect.Pointer {
 		if len(fi) == 0 {
 			n.exec = func(f *frame) bltn {
 				getFrame(f, l).data[i] = value(f).Elem().Method(mi)
@@ -2707,7 +2707,7 @@ func doCompositeBinStruct(n *node, hasType bool) {
 		}
 		d := value(f)
 		switch {
-		case d.Kind() == reflect.Ptr:
+		case d.Kind() == reflect.Pointer:
 			d.Set(s.Addr())
 		default:
 			getFrame(f, l).data[frameIndex] = s
@@ -2777,7 +2777,7 @@ func doComposite(n *node, hasType bool, keyed bool) {
 		}
 		d := value(f)
 		switch {
-		case d.Kind() == reflect.Ptr:
+		case d.Kind() == reflect.Pointer:
 			d.Set(a.Addr())
 		case destInterface:
 			if len(destType(n).field) > 0 {
@@ -3443,7 +3443,7 @@ func lenConst(n *node) {
 		return
 	}
 	t := c1.typ.TypeOf()
-	for t.Kind() == reflect.Ptr {
+	for t.Kind() == reflect.Pointer {
 		t = t.Elem()
 	}
 	n.rval.SetInt(int64(t.Len()))
@@ -3456,7 +3456,7 @@ func _len(n *node) {
 		val := value
 		value = func(f *frame) reflect.Value {
 			v := val(f).Elem()
-			for v.Kind() == reflect.Ptr {
+			for v.Kind() == reflect.Pointer {
 				v = v.Elem()
 			}
 			return v
@@ -3481,7 +3481,7 @@ func _new(n *node) {
 	next := getExec(n.tnext)
 	t1 := n.child[1].typ
 	typ := t1.TypeOf()
-	dest := genValueOutput(n, reflect.PtrTo(typ))
+	dest := genValueOutput(n, reflect.PointerTo(typ))
 
 	if isInterfaceSrc(t1) && (!isEmptyInterface(t1) || len(t1.method) > 0) {
 		typ = zeroInterfaceValue().Type()

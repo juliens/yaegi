@@ -25,8 +25,16 @@ linters:
     goconst:
       min-len: 3
       min-occurrences: 3
+      # The interpreter names Go predeclared types and identifiers as plain strings
+      # (universe scope, type names): turning them into constants would not help readability.
+      ignore-string-values:
+        - ^(bool|byte|comparable|complex64|complex128|error|float32|float64|int|int8|int16|int32|int64|interface\{\}|nil|rune|string|uint|uint8|uint16|uint32|uint64|uintptr)$
     misspell:
       locale: US
+    perfsprint:
+      # Concatenations in loops only join a few short strings (type ids, build tags):
+      # a strings.Builder would add noise without measurable gain.
+      concat-loop: false
     staticcheck:
       checks: ["all", "-ST1000", "-ST1023", "-QF1001", "-QF1008", "-QF1011"]
   exclusions:

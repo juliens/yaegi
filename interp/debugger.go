@@ -696,7 +696,7 @@ func (f *DebugFrameScope) Variables() []*DebugVariable {
 
 	m := make([]*DebugVariable, 0, len(f.frame.data))
 	for i, v := range f.frame.data {
-		if typ := v.Type(); typ.AssignableTo(rNodeType) || typ.Kind() == reflect.Ptr && typ.Elem().AssignableTo(rNodeType) {
+		if typ := v.Type(); typ.AssignableTo(rNodeType) || typ.Kind() == reflect.Pointer && typ.Elem().AssignableTo(rNodeType) {
 			continue
 		}
 		name, ok := index[i]
