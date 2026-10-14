@@ -2,6 +2,7 @@
 # oracle: differential check of yaegi against the Go toolchain.
 #
 # Usage: scripts/oracle.sh file.go [file.go...]
+#        ORACLE_YAEGI_FLAGS=-unsafe scripts/oracle.sh file.go
 #
 # For each program, compares stdout, stderr presence and exit status of `go run` with `yaegi run`
 # built from the current tree. Prints one line per file (MATCH / DIFF / GOFAIL) and a diff for DIFF.
@@ -45,7 +46,8 @@ for f in "$@"; do
 	fi
 	abs="$(cd "$(dirname "$f")" && pwd)/$(basename "$f")"
 	run "$work/go" go run "$abs"
-	run "$work/yg" "$work/yaegi" run "$abs"
+	# shellcheck disable=SC2086 # ORACLE_YAEGI_FLAGS is a list of flags.
+	run "$work/yg" "$work/yaegi" run ${ORACLE_YAEGI_FLAGS:-} "$abs"
 
 	go_status="$(cat "$work/go.status")"
 	yg_status="$(cat "$work/yg.status")"

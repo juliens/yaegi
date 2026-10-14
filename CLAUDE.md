@@ -12,6 +12,8 @@ nothing may be visible from `traefik/yaegi` (the upstream). Read the rules below
 3. **No cross-references.** In commit messages, PR/issue titles and bodies, never write `#123`, `GH-123`,
    `traefik/yaegi#123`, or a `github.com/traefik/yaegi/issues|pull/...` URL: each creates a public
    "referenced this issue" event on upstream and notifies its subscribers. Write `upstream-issue: 123` instead.
+   To reference an issue or PR of the fork itself, always use the fully qualified form `juliens/yaegi#12`
+   (e.g. `Closes juliens/yaegi#12`).
 4. **No @mentions** of anyone.
 5. **No tags, no releases.** A pushed `v*` tag triggers `.github/workflows/release.yml`.
 6. Do not modify the `upstream` remote: its push URL is deliberately invalid.
@@ -38,6 +40,8 @@ go test ./...                                   # everything
 go test -race ./interp                          # CI also runs this
 golangci-lint run                               # lint (config in .golangci.yml)
 scripts/oracle.sh prog.go [...]                 # differential check: go run vs yaegi run
+ORACLE_YAEGI_FLAGS=-unsafe scripts/oracle.sh prog.go   # same, for programs using unsafe
+scripts/fork-guard.sh check-file body.md        # check a PR/issue body before publishing it
 ```
 
 Known local failure: `cmd/yaegi` `TestYaegiCmdCancel` (Ctrl-C on `for {}` / `select {}` kills the process instead of

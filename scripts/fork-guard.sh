@@ -4,6 +4,7 @@
 # Modes:
 #   fork-guard.sh claude-hook          Claude Code PreToolUse hook (Bash tool JSON on stdin).
 #   fork-guard.sh commit-msg <file>    git commit-msg hook.
+#   fork-guard.sh check-file <file>    check a PR/issue body file before publishing it.
 #   fork-guard.sh pre-push <remote> <url>  git pre-push hook (refs on stdin).
 #   fork-guard.sh install              install the git hooks in .git/hooks.
 #
@@ -81,6 +82,17 @@ claude_hook() {
 	# Text that ends up on GitHub: commit messages and gh pr/issue bodies.
 	if grep -Eq 'git[[:space:]]+commit|gh[[:space:]]+(pr|issue)[[:space:]]+(create|comment|edit|review)' <<<"$cmd"; then
 		check_text "$cmd"
+		# Bodies passed as files are checked too.
+		local f
+		for f in $(grep -Eo -- '(--body-file|-F|--file)[[:space:]=]+[^[:space:]]+' <<<"$cmd" | sed -E 's/^[^[:space:]=]+[[:space:]=]+//'); do
+			f="${f%\"}"
+			f="${f#\"}"
+			f="${f%\'}"
+			f="${f#\'}"
+			if [[ "$f" != "-" && -f "$f" ]]; then
+				check_text "$(cat "$f")"
+			fi
+		done
 	fi
 
 	exit 0
@@ -119,10 +131,14 @@ install() {
 case "${1:-}" in
 claude-hook) claude_hook ;;
 commit-msg) commit_msg "$2" ;;
+check-file)
+	deny_status=1
+	check_text "$(cat "$2")"
+	;;
 pre-push) pre_push "$2" "$3" ;;
 install) install ;;
 *)
-	echo "usage: $0 {claude-hook|commit-msg <file>|pre-push <remote> <url>|install}" >&2
+	echo "usage: $0 {claude-hook|commit-msg <file>|check-file <file>|pre-push <remote> <url>|install}" >&2
 	exit 64
 	;;
 esac
