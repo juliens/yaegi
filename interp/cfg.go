@@ -1077,7 +1077,7 @@ func (interp *Interpreter) cfg(root *node, sc *scope, importPath, pkgName string
 				fallthrough
 			case reflect.Slice, reflect.String:
 				n.gen = getIndexArray
-			case reflect.Ptr:
+			case reflect.Pointer:
 				if typ2 := typ.Elem(); typ2.Kind() == reflect.Array {
 					l = typ2.Len()
 					n.gen = getIndexArray
@@ -1244,7 +1244,7 @@ func (interp *Interpreter) cfg(root *node, sc *scope, importPath, pkgName string
 					n.findex = 0
 				case bname == "cap" && isInConstOrTypeDecl(n):
 					t := n.child[1].typ.TypeOf()
-					for t.Kind() == reflect.Ptr {
+					for t.Kind() == reflect.Pointer {
 						t = t.Elem()
 					}
 					switch t.Kind() {
@@ -1257,7 +1257,7 @@ func (interp *Interpreter) cfg(root *node, sc *scope, importPath, pkgName string
 					n.gen = nop
 				case bname == "len" && isInConstOrTypeDecl(n):
 					t := n.child[1].typ.TypeOf()
-					for t.Kind() == reflect.Ptr {
+					for t.Kind() == reflect.Pointer {
 						t = t.Elem()
 					}
 					switch t.Kind() {
@@ -2599,7 +2599,7 @@ func getDefault(n *node) int {
 	return -1
 }
 
-func isBinType(v reflect.Value) bool { return v.IsValid() && v.Kind() == reflect.Ptr && v.IsNil() }
+func isBinType(v reflect.Value) bool { return v.IsValid() && v.Kind() == reflect.Pointer && v.IsNil() }
 
 // isType returns true if node refers to a type definition, false otherwise.
 func (n *node) isType(sc *scope) bool {
@@ -3008,7 +3008,7 @@ func compositeGenerator(n *node, typ *itype, rtyp reflect.Type) (gen bltnGenerat
 		case reflect.Map:
 			// TODO(mpl): maybe needs a NoType version too
 			gen = compositeBinMap
-		case reflect.Ptr:
+		case reflect.Pointer:
 			gen = compositeGenerator(n, typ, n.typ.val.rtype)
 		case reflect.Slice, reflect.Array:
 			gen = compositeBinSlice
@@ -3035,7 +3035,7 @@ func matchSelectorMethod(sc *scope, n *node) (err error) {
 			if hasRecvType {
 				n.typ.recv = n.typ
 			}
-		case n.typ.TypeOf().Kind() == reflect.Ptr:
+		case n.typ.TypeOf().Kind() == reflect.Pointer:
 			if field, ok := n.typ.rtype.Elem().FieldByName(name); ok {
 				n.typ = valueTOf(field.Type)
 				n.val = field.Index
@@ -3053,7 +3053,7 @@ func matchSelectorMethod(sc *scope, n *node) (err error) {
 			fallthrough
 		default:
 			// method lookup failed on type, now lookup on pointer to type
-			pt := reflect.PtrTo(n.typ.rtype)
+			pt := reflect.PointerTo(n.typ.rtype)
 			if m2, ok2 := pt.MethodByName(name); ok2 {
 				n.val = m2.Index
 				n.gen = getIndexBinPtrMethod
@@ -3075,10 +3075,10 @@ func matchSelectorMethod(sc *scope, n *node) (err error) {
 			n.recv = &receiver{node: n.child[0]}
 			n.gen = getIndexBinElemMethod
 			n.action = aGetMethod
-		} else if method, ok := reflect.PtrTo(n.typ.val.rtype).MethodByName(name); ok {
+		} else if method, ok := reflect.PointerTo(n.typ.val.rtype).MethodByName(name); ok {
 			n.val = method.Index
 			n.gen = getIndexBinMethod
-			n.typ = valueTOf(method.Type, withRecv(valueTOf(reflect.PtrTo(n.typ.val.rtype), isBinMethod())))
+			n.typ = valueTOf(method.Type, withRecv(valueTOf(reflect.PointerTo(n.typ.val.rtype), isBinMethod())))
 			n.recv = &receiver{node: n.child[0]}
 			n.action = aGetMethod
 		} else if field, ok := n.typ.val.rtype.FieldByName(name); ok {

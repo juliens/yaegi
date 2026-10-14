@@ -118,7 +118,7 @@ func (check typecheck) addressExpr(n *node) error {
 
 // starExpr type checks a star expression on a variable.
 func (check typecheck) starExpr(n *node) error {
-	if n.typ.TypeOf().Kind() != reflect.Ptr {
+	if n.typ.TypeOf().Kind() != reflect.Pointer {
 		return n.cfgErrorf("invalid operation: cannot indirect %q", n.name())
 	}
 	return nil
@@ -538,7 +538,7 @@ func (check typecheck) sliceExpr(n *node) error {
 		// TODO(marc): check addressable status of array object (i.e. composite arrays are not).
 	case reflect.Slice:
 		valid = true
-	case reflect.Ptr:
+	case reflect.Pointer:
 		if t.Elem().Kind() == reflect.Array {
 			valid = true
 			l = t.Elem().Len()
@@ -622,7 +622,7 @@ func (check typecheck) typeAssertionExpr(n *node, typ *itype) error {
 			}
 			return n.cfgErrorf("impossible type assertion: %s does not implement %s (missing %v method)", typ.id(), n.typ.id(), name)
 		}
-		if tm.recv != nil && tm.recv.TypeOf().Kind() == reflect.Ptr && typ.TypeOf().Kind() != reflect.Ptr {
+		if tm.recv != nil && tm.recv.TypeOf().Kind() == reflect.Pointer && typ.TypeOf().Kind() != reflect.Pointer {
 			return n.cfgErrorf("impossible type assertion: %s does not implement %s as %q method has a pointer receiver", typ.id(), n.typ.id(), name)
 		}
 
@@ -941,7 +941,7 @@ func (check typecheck) builtin(name string, n *node, child []*node, ellipsis boo
 
 // arrayDeref returns A if typ is *A, otherwise typ.
 func arrayDeref(typ *itype) *itype {
-	if typ.cat == valueT && typ.TypeOf().Kind() == reflect.Ptr {
+	if typ.cat == valueT && typ.TypeOf().Kind() == reflect.Pointer {
 		t := typ.TypeOf()
 		if t.Elem().Kind() == reflect.Array {
 			return valueTOf(t.Elem())
@@ -1004,8 +1004,8 @@ func (check typecheck) argument(p param, ftyp *itype, i, l int, ellipsis bool) e
 			return p.nod.cfgErrorf("can only use ... with matching parameter")
 		}
 		t := p.Type().TypeOf()
-		if t.Kind() != reflect.Slice || !(valueTOf(t.Elem())).assignableTo(atyp) {
-			return p.nod.cfgErrorf("cannot use %s as type %s", p.nod.typ.id(), (sliceOf(atyp)).id())
+		if t.Kind() != reflect.Slice || !valueTOf(t.Elem()).assignableTo(atyp) {
+			return p.nod.cfgErrorf("cannot use %s as type %s", p.nod.typ.id(), sliceOf(atyp).id())
 		}
 		return nil
 	}

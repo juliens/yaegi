@@ -1023,7 +1023,7 @@ func nodeType2(interp *Interpreter, sc *scope, n *node, seen []*node) (t *itype,
 
 		if t.cat == valueT {
 			switch t.rtype.Kind() {
-			case reflect.Array, reflect.Ptr:
+			case reflect.Array, reflect.Pointer:
 				t = valueTOf(reflect.SliceOf(t.rtype.Elem()), withScope(sc))
 			}
 			break
@@ -1516,10 +1516,10 @@ func (t *itype) convertibleTo(o *itype) bool {
 
 	// unsafe checks
 	tt, ot := t.TypeOf(), o.TypeOf()
-	if (tt.Kind() == reflect.Ptr || tt.Kind() == reflect.Uintptr) && ot.Kind() == reflect.UnsafePointer {
+	if (tt.Kind() == reflect.Pointer || tt.Kind() == reflect.Uintptr) && ot.Kind() == reflect.UnsafePointer {
 		return true
 	}
-	if tt.Kind() == reflect.UnsafePointer && (ot.Kind() == reflect.Ptr || ot.Kind() == reflect.Uintptr) {
+	if tt.Kind() == reflect.UnsafePointer && (ot.Kind() == reflect.Pointer || ot.Kind() == reflect.Uintptr) {
 		return true
 	}
 
@@ -1765,7 +1765,7 @@ func (t *itype) lookupBinField(name string) (s reflect.StructField, index []int,
 		return
 	}
 	rt := t.TypeOf()
-	for t.cat == valueT && rt.Kind() == reflect.Ptr {
+	for t.cat == valueT && rt.Kind() == reflect.Pointer {
 		rt = rt.Elem()
 	}
 	if rt.Kind() != reflect.Struct {
@@ -1923,7 +1923,7 @@ func (t *itype) lookupBinMethod2(name string, seen map[*itype]bool) (m reflect.M
 	}
 	m, ok = t.TypeOf().MethodByName(name)
 	if !ok {
-		m, ok = reflect.PtrTo(t.TypeOf()).MethodByName(name)
+		m, ok = reflect.PointerTo(t.TypeOf()).MethodByName(name)
 		isPtr = ok
 	}
 	return m, index, isPtr, ok
@@ -1939,7 +1939,7 @@ func lookupFieldOrMethod(t *itype, name string) *itype {
 		var recv *itype
 		if t.rtype.Kind() != reflect.Interface {
 			recv = t
-			if isPtr && t.cat != ptrT && t.rtype.Kind() != reflect.Ptr {
+			if isPtr && t.cat != ptrT && t.rtype.Kind() != reflect.Pointer {
 				recv = ptrOf(t)
 			}
 		}
@@ -2026,8 +2026,8 @@ func (t *itype) fixDummy(typ reflect.Type) reflect.Type {
 		return reflect.FuncOf(in, out, typ.IsVariadic())
 	case reflect.Map:
 		return reflect.MapOf(t.fixDummy(typ.Key()), t.fixDummy(typ.Elem()))
-	case reflect.Ptr:
-		return reflect.PtrTo(t.fixDummy(typ.Elem()))
+	case reflect.Pointer:
+		return reflect.PointerTo(t.fixDummy(typ.Elem()))
 	case reflect.Slice:
 		return reflect.SliceOf(t.fixDummy(typ.Elem()))
 	case reflect.Struct:
@@ -2133,9 +2133,9 @@ func (t *itype) refType(ctx *refTypeContext) reflect.Type {
 			// We have a pointer to a recursive struct which is not yet fully computed.
 			// Return it but do not yet store it in rtype, so the complete version can
 			// be stored in future.
-			return reflect.PtrTo(rt)
+			return reflect.PointerTo(rt)
 		}
-		t.rtype = reflect.PtrTo(rt)
+		t.rtype = reflect.PointerTo(rt)
 	case structT:
 		if t.name != "" {
 			ctx.defined[name] = t
@@ -2239,7 +2239,7 @@ func (t *itype) frameType() (r reflect.Type) {
 	case mapT:
 		r = reflect.MapOf(t.key.frameType(), t.val.frameType())
 	case ptrT:
-		r = reflect.PtrTo(t.val.frameType())
+		r = reflect.PointerTo(t.val.frameType())
 	default:
 		r = t.TypeOf()
 	}
@@ -2314,7 +2314,7 @@ func (t *itype) hasNil() bool {
 	switch rt := t.TypeOf(); rt.Kind() {
 	case reflect.UnsafePointer:
 		return true
-	case reflect.Slice, reflect.Ptr, reflect.Func, reflect.Interface, reflect.Map, reflect.Chan:
+	case reflect.Slice, reflect.Pointer, reflect.Func, reflect.Interface, reflect.Map, reflect.Chan:
 		return true
 	case reflect.Struct:
 		if rt == valueInterfaceType {
@@ -2333,7 +2333,7 @@ func (t *itype) elem() *itype {
 
 func hasElem(t reflect.Type) bool {
 	switch t.Kind() {
-	case reflect.Array, reflect.Chan, reflect.Map, reflect.Ptr, reflect.Slice:
+	case reflect.Array, reflect.Chan, reflect.Map, reflect.Pointer, reflect.Slice:
 		return true
 	}
 	return false
@@ -2384,7 +2384,7 @@ func isBool(t *itype) bool { return t.TypeOf().Kind() == reflect.Bool }
 func isChan(t *itype) bool { return t.TypeOf().Kind() == reflect.Chan }
 func isFunc(t *itype) bool { return t.TypeOf().Kind() == reflect.Func }
 func isMap(t *itype) bool  { return t.TypeOf().Kind() == reflect.Map }
-func isPtr(t *itype) bool  { return t.TypeOf().Kind() == reflect.Ptr }
+func isPtr(t *itype) bool  { return t.TypeOf().Kind() == reflect.Pointer }
 
 func isEmptyInterface(t *itype) bool {
 	return t != nil && t.cat == interfaceT && len(t.field) == 0
@@ -2452,7 +2452,7 @@ func isStruct(t *itype) bool {
 		return isStruct(t.val)
 	case valueT:
 		k := t.rtype.Kind()
-		return k == reflect.Struct || (k == reflect.Ptr && t.rtype.Elem().Kind() == reflect.Struct)
+		return k == reflect.Struct || (k == reflect.Pointer && t.rtype.Elem().Kind() == reflect.Struct)
 	default:
 		return false
 	}

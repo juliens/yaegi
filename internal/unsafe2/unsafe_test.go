@@ -15,7 +15,7 @@ func TestSwapFieldType(t *testing.T) {
 		},
 		{
 			Name: "B",
-			Type: reflect.PtrTo(unsafe2.DummyType),
+			Type: reflect.PointerTo(unsafe2.DummyType),
 		},
 		{
 			Name: "C",
@@ -23,7 +23,7 @@ func TestSwapFieldType(t *testing.T) {
 		},
 	}
 	typ := reflect.StructOf(f)
-	ntyp := reflect.PtrTo(typ)
+	ntyp := reflect.PointerTo(typ)
 
 	unsafe2.SetFieldType(typ, 1, ntyp)
 

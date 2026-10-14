@@ -56,7 +56,7 @@ func genValueRecv(n *node) func(*frame) reflect.Value {
 	return func(f *frame) reflect.Value {
 		r := v(f)
 		for _, i := range fi {
-			if r.Kind() == reflect.Ptr {
+			if r.Kind() == reflect.Pointer {
 				r = r.Elem()
 			}
 			// Note that we can't use reflect FieldByIndex method, as we may
@@ -98,7 +98,7 @@ func genValueAs(n *node, t reflect.Type) func(*frame) reflect.Value {
 	return func(f *frame) reflect.Value {
 		v := value(f)
 		switch v.Kind() {
-		case reflect.Chan, reflect.Func, reflect.Interface, reflect.Ptr, reflect.Map, reflect.Slice, reflect.UnsafePointer:
+		case reflect.Chan, reflect.Func, reflect.Interface, reflect.Pointer, reflect.Map, reflect.Slice, reflect.UnsafePointer:
 			if v.IsNil() {
 				return reflect.New(t).Elem()
 			}
@@ -186,7 +186,7 @@ func genFuncValue(n *node) func(*frame) reflect.Value {
 func genValueArray(n *node) func(*frame) reflect.Value {
 	value := genValue(n)
 	// dereference array pointer, to support array operations on array pointer
-	if n.typ.TypeOf().Kind() == reflect.Ptr {
+	if n.typ.TypeOf().Kind() == reflect.Pointer {
 		return func(f *frame) reflect.Value {
 			return value(f).Elem()
 		}
@@ -198,7 +198,7 @@ func genValueRangeArray(n *node) func(*frame) reflect.Value {
 	value := genValue(n)
 
 	switch {
-	case n.typ.TypeOf().Kind() == reflect.Ptr:
+	case n.typ.TypeOf().Kind() == reflect.Pointer:
 		// dereference array pointer, to support array operations on array pointer
 		return func(f *frame) reflect.Value {
 			return value(f).Elem()
