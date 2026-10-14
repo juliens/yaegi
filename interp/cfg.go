@@ -3078,7 +3078,7 @@ func matchSelectorMethod(sc *scope, n *node) (err error) {
 		} else if method, ok := reflect.PtrTo(n.typ.val.rtype).MethodByName(name); ok {
 			n.val = method.Index
 			n.gen = getIndexBinMethod
-			n.typ = valueTOf(method.Type, withRecv(valueTOf(reflect.PtrTo(n.typ.val.rtype), isBinMethod())))
+			n.typ = valueTOf(method.Type, isBinMethod(), withRecv(valueTOf(reflect.PointerTo(n.typ.val.rtype))))
 			n.recv = &receiver{node: n.child[0]}
 			n.action = aGetMethod
 		} else if field, ok := n.typ.val.rtype.FieldByName(name); ok {
