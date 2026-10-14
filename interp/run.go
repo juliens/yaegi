@@ -3247,14 +3247,12 @@ func appendSlice(n *node) {
 }
 
 func _append(n *node) {
-	if len(n.child) == 3 {
-		c1, c2 := n.child[1], n.child[2]
-		if (c1.typ.cat == valueT || c2.typ.cat == valueT) && c1.typ.rtype == c2.typ.rtype ||
-			isArray(c2.typ) && c2.typ.elem().id() == n.typ.elem().id() ||
-			isByteArray(c1.typ.TypeOf()) && isString(c2.typ.TypeOf()) {
-			appendSlice(n)
-			return
-		}
+	// The last argument is spread only if followed by an ellipsis, as in append(s, x...).
+	// The argument type alone is not enough: append(s, x) where x is a slice assignable
+	// to the element type of s (e.g. s is []any) must append x as a single element.
+	if n.action == aCallSlice && len(n.child) == 3 {
+		appendSlice(n)
+		return
 	}
 
 	dest := genValueOutput(n, n.typ.rtype)
