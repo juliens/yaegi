@@ -50,6 +50,8 @@ func init() {
 	constBltn[bltnAlignof] = alignof
 	constBltn[bltnOffsetof] = offsetof
 	constBltn[bltnSizeof] = sizeof
+	constBltn[bltnMax] = minMaxConst
+	constBltn[bltnMin] = minMaxConst
 }
 
 // cfg generates a control flow graph (CFG) from AST (wiring successors in AST)
@@ -745,6 +747,10 @@ func (interp *Interpreter) cfg(root *node, sc *scope, importPath, pkgName string
 					if (sc.global || sc.isRedeclared(dest)) && !isLoopVarShadow(n, dest.ident) {
 						// Do not overload existing symbols (defined in GTA) in global scope.
 						sym, _, _ = sc.lookup(dest.ident)
+						if sym != nil && sym.kind == bltnSym {
+							// The declaration shadows a predeclared builtin function.
+							sym = nil
+						}
 					}
 					if sym == nil {
 						sym = &symbol{index: sc.add(dest.typ), kind: varSym, typ: dest.typ}
