@@ -6,6 +6,8 @@ import (
 	"errors"
 	"fmt"
 	"go/constant"
+	"go/token"
+	"math"
 	"reflect"
 	"regexp"
 	"strings"
@@ -3428,6 +3430,131 @@ func _delete(n *node) {
 		args[0].SetMapIndex(args[1], z)
 		return nil
 	})
+}
+
+func _clear(n *node) {
+	in := []func(*frame) reflect.Value{genValue(n.child[1])}
+
+	genBuiltinDeferWrapper(n, in, nil, func(args []reflect.Value) []reflect.Value {
+		args[0].Clear()
+		return nil
+	})
+}
+
+func _minMax(n *node) {
+	typ := n.typ.TypeOf()
+	dest := genValueOutput(n, typ)
+	args := n.child[1:]
+	values := make([]func(*frame) reflect.Value, len(args))
+	for i, c := range args {
+		if c.typ.untyped {
+			values[i] = genValueAs(c, typ)
+		} else {
+			values[i] = genValue(c)
+		}
+	}
+	better := minMaxSelector(typ.Kind(), n.child[0].ident == bltnMax)
+	next := getExec(n.tnext)
+
+	n.exec = func(f *frame) bltn {
+		r := values[0](f)
+		for _, value := range values[1:] {
+			if v := value(f); better(v, r) {
+				r = v
+			}
+		}
+		dest(f).Set(r)
+		return next
+	}
+}
+
+// minMaxSelector returns a function reporting whether v must replace the current result r
+// of a min (or max if isMax is true) builtin call, for values of the given kind.
+func minMaxSelector(kind reflect.Kind, isMax bool) func(v, r reflect.Value) bool {
+	var less func(a, b reflect.Value) bool
+	switch kind {
+	case reflect.Int, reflect.Int8, reflect.Int16, reflect.Int32, reflect.Int64:
+		less = func(a, b reflect.Value) bool { return a.Int() < b.Int() }
+	case reflect.Uint, reflect.Uint8, reflect.Uint16, reflect.Uint32, reflect.Uint64, reflect.Uintptr:
+		less = func(a, b reflect.Value) bool { return a.Uint() < b.Uint() }
+	case reflect.String:
+		less = func(a, b reflect.Value) bool { return a.String() < b.String() }
+	case reflect.Float32, reflect.Float64:
+		// A NaN argument makes the result NaN, and -0.0 is lower than 0.0.
+		if isMax {
+			return func(v, r reflect.Value) bool {
+				vf, rf := v.Float(), r.Float()
+				return vf > rf || math.IsNaN(vf) || vf == 0 && rf == 0 && math.Signbit(rf)
+			}
+		}
+		return func(v, r reflect.Value) bool {
+			vf, rf := v.Float(), r.Float()
+			return vf < rf || math.IsNaN(vf) || vf == 0 && rf == 0 && math.Signbit(vf)
+		}
+	default:
+		panic(fmt.Sprintf("min/max: unsupported kind %s", kind))
+	}
+
+	if isMax {
+		return func(v, r reflect.Value) bool { return less(r, v) }
+	}
+	return less
+}
+
+// minMaxConst computes at compile time a min or max builtin call whose arguments are all constants.
+func minMaxConst(n *node) {
+	args := n.child[1:]
+	vals := make([]constant.Value, len(args))
+	for i, c := range args {
+		v, ok := toConstant(c.rval)
+		if !ok {
+			return
+		}
+		vals[i] = v
+	}
+
+	op := token.LSS
+	if n.child[0].ident == bltnMax {
+		op = token.GTR
+	}
+	w := 0
+	for i := 1; i < len(vals); i++ {
+		if constant.Compare(vals[i], op, vals[w]) {
+			w = i
+		}
+	}
+
+	switch {
+	case !n.typ.untyped:
+		n.rval = args[w].rval
+	case isFloat(n.typ.TypeOf()):
+		n.rval = reflect.ValueOf(constant.ToFloat(vals[w]))
+	default:
+		n.rval = reflect.ValueOf(vals[w])
+	}
+	n.gen = nop
+}
+
+// toConstant returns the constant.Value corresponding to the constant value v.
+func toConstant(v reflect.Value) (constant.Value, bool) {
+	if !v.IsValid() {
+		return nil, false
+	}
+	if c, ok := v.Interface().(constant.Value); ok {
+		return c, true
+	}
+	switch v.Kind() {
+	case reflect.Int, reflect.Int8, reflect.Int16, reflect.Int32, reflect.Int64:
+		return constant.MakeInt64(v.Int()), true
+	case reflect.Uint, reflect.Uint8, reflect.Uint16, reflect.Uint32, reflect.Uint64, reflect.Uintptr:
+		return constant.MakeUint64(v.Uint()), true
+	case reflect.Float32, reflect.Float64:
+		return constant.MakeFloat64(v.Float()), true
+	case reflect.String:
+		return constant.MakeString(v.String()), true
+	default:
+		return nil, false
+	}
 }
 
 func capConst(n *node) {

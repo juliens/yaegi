@@ -663,6 +663,8 @@ func nodeType2(interp *Interpreter, sc *scope, n *node, seen []*node) (t *itype,
 				}
 			case bltnCap, bltnCopy, bltnLen:
 				t = sc.getType("int")
+			case bltnMax, bltnMin:
+				t, err = minMaxType(interp, sc, n, seen)
 			case bltnAppend, bltnMake:
 				t, err = nodeType2(interp, sc, n.child[1], seen)
 			case bltnNew:
@@ -1194,6 +1196,29 @@ func findPackageType(interp *Interpreter, sc *scope, n *node) *itype {
 	return sym.typ
 }
 
+// minMaxType returns the result type of a min or max builtin call: the type of the first
+// typed argument or, if all arguments are untyped, the untyped type of highest rank.
+func minMaxType(interp *Interpreter, sc *scope, n *node, seen []*node) (*itype, error) {
+	if len(n.child) < 2 {
+		return nil, n.cfgErrorf("not enough arguments in call to %s", n.child[0].ident)
+	}
+
+	var t *itype
+	for _, c := range n.child[1:] {
+		ct, err := nodeType2(interp, sc, c, seen)
+		if err != nil {
+			return nil, err
+		}
+		if ct.incomplete || !ct.untyped {
+			return ct, nil
+		}
+		if t == nil || isNumber(t.TypeOf()) && isNumber(ct.TypeOf()) && ct.TypeOf().Kind() > t.TypeOf().Kind() {
+			t = ct
+		}
+	}
+	return t, nil
+}
+
 func isBuiltinCall(n *node, sc *scope) bool {
 	if n.kind != callExpr {
 		return false
@@ -1346,7 +1371,7 @@ func (t *itype) numOut() int {
 		}
 	case builtinT:
 		switch t.name {
-		case "append", "cap", "complex", "copy", "imag", "len", "make", "new", "real", "recover", "unsafe.Alignof", "unsafe.Offsetof", "unsafe.Sizeof":
+		case "append", "cap", "complex", "copy", "imag", "len", "make", "max", "min", "new", "real", "recover", "unsafe.Alignof", "unsafe.Offsetof", "unsafe.Sizeof":
 			return 1
 		}
 	}

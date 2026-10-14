@@ -727,6 +727,7 @@ var builtinFuncs = map[string]struct {
 	bltnAlignof:  {args: 1, variadic: false},
 	bltnAppend:   {args: 1, variadic: true},
 	bltnCap:      {args: 1, variadic: false},
+	bltnClear:    {args: 1, variadic: false},
 	bltnClose:    {args: 1, variadic: false},
 	bltnComplex:  {args: 2, variadic: false},
 	bltnImag:     {args: 1, variadic: false},
@@ -734,6 +735,8 @@ var builtinFuncs = map[string]struct {
 	bltnDelete:   {args: 2, variadic: false},
 	bltnLen:      {args: 1, variadic: false},
 	bltnMake:     {args: 1, variadic: true},
+	bltnMax:      {args: 1, variadic: true},
+	bltnMin:      {args: 1, variadic: true},
 	bltnNew:      {args: 1, variadic: false},
 	bltnOffsetof: {args: 1, variadic: false},
 	bltnPanic:    {args: 1, variadic: false},
@@ -809,6 +812,11 @@ func (check typecheck) builtin(name string, n *node, child []*node, ellipsis boo
 		}
 		if !ok {
 			return params[0].nod.cfgErrorf("invalid argument for %s", name)
+		}
+	case bltnClear:
+		typ := params[0].Type()
+		if k := typ.TypeOf().Kind(); k != reflect.Map && k != reflect.Slice {
+			return params[0].nod.cfgErrorf("invalid argument: %s must be a map or slice", typ.id())
 		}
 	case bltnClose:
 		p := params[0]
@@ -890,6 +898,8 @@ func (check typecheck) builtin(name string, n *node, child []*node, ellipsis boo
 		if typ.key != nil && !ktyp.assignableTo(typ.key) {
 			return params[1].nod.cfgErrorf("cannot use %s as type %s in delete", ktyp.id(), typ.key.id())
 		}
+	case bltnMax, bltnMin:
+		return check.minMax(name, params)
 	case bltnMake:
 		var min int
 		switch child[0].typ.TypeOf().Kind() {
@@ -935,6 +945,44 @@ func (check typecheck) builtin(name string, n *node, child []*node, ellipsis boo
 		// Nothing to do.
 	default:
 		return n.cfgErrorf("unsupported builtin %s", name)
+	}
+	return nil
+}
+
+// minMax type checks the arguments of the min and max builtins.
+// All arguments must have the same ordered type: untyped arguments are converted
+// to the type of the first typed argument or, if all arguments are untyped,
+// to the untyped type of highest rank.
+func (check typecheck) minMax(name string, params []param) error {
+	for _, p := range params {
+		if p.typ != nil {
+			return p.nod.cfgErrorf("multiple-value %s in single-value context", p.nod.child[0].typ.id())
+		}
+	}
+
+	typ := params[0].Type()
+	for _, p := range params {
+		t := p.Type()
+		if !t.untyped {
+			typ = t
+			break
+		}
+		if isNumber(typ.TypeOf()) && isNumber(t.TypeOf()) && t.TypeOf().Kind() > typ.TypeOf().Kind() {
+			typ = t
+		}
+	}
+
+	for _, p := range params {
+		if err := check.convertUntyped(p.nod, typ); err != nil {
+			return err
+		}
+		if t := p.Type(); !t.equals(typ) {
+			return p.nod.cfgErrorf("invalid argument: mismatched types %s and %s in call to %s", typ.id(), t.id(), name)
+		}
+	}
+
+	if !typ.ordered() {
+		return params[0].nod.cfgErrorf("invalid argument: %s cannot be ordered in call to %s", typ.id(), name)
 	}
 	return nil
 }
