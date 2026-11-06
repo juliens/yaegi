@@ -8,7 +8,7 @@ on:
 
 env:
   GO_VERSION: stable
-  GOLANGCI_LINT_VERSION: v2.4.0
+  GOLANGCI_LINT_VERSION: v2.15.0
 
 jobs:
 
@@ -33,16 +33,14 @@ jobs:
           # git diff --exit-code go.sum
           go mod download
 
-      - name: Install golangci-lint ${{ env.GOLANGCI_LINT_VERSION }}
-        run: curl -sSfL https://raw.githubusercontent.com/golangci/golangci-lint/master/install.sh | sh -s -- -b $(go env GOPATH)/bin ${GOLANGCI_LINT_VERSION}
-
       - name: Run golangci-lint ${{ env.GOLANGCI_LINT_VERSION }}
-        run: make check
+        uses: golangci/golangci-lint-action@ba0d7d2ec06a0ea1cb5fa41b2e4a3ab91d21278a # v9.3.0
+        with:
+          version: ${{ env.GOLANGCI_LINT_VERSION }}
 
   generate:
     name: Checks code and generated code
     runs-on: ubuntu-latest
-    needs: linting
     strategy:
       matrix:
         go-version: [ oldstable, stable ]
@@ -70,7 +68,6 @@ jobs:
   main:
     name: Build and Test
     runs-on: ubuntu-latest
-    needs: linting
     defaults:
       run:
         working-directory: ${{ github.workspace }}/go/src/github.com/traefik/yaegi
