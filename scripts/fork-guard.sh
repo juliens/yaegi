@@ -1,5 +1,7 @@
 #!/usr/bin/env bash
-# fork-guard: keeps all work on the juliens/yaegi fork invisible from traefik/yaegi.
+# fork-guard: keeps all work on the juliens/yaegi fork invisible from
+# traefik/yaegi and traefik/traefik, and keeps pushes away from the old,
+# archived juliens/go-vm.
 #
 # Modes:
 #   fork-guard.sh claude-hook          Claude Code PreToolUse hook (Bash tool JSON on stdin).
@@ -12,11 +14,16 @@
 
 set -euo pipefail
 
-upstream_slug='traefik/yaegi'
+# Repositories that must never see this work (extended regular expression).
+upstream_slug='traefik/(yaegi|traefik)'
+# The home repository: pull requests go there.
+home_slug='juliens/yaegi'
+# The old, archived copy: nothing is pushed there any more.
+old_slug='juliens/go-vm'
 
 deny() {
 	echo "fork-guard: $1" >&2
-	echo "fork-guard: this repository is a private playground; nothing may reach ${upstream_slug}. See CLAUDE.md." >&2
+	echo "fork-guard: this repository is private; nothing may reach traefik/yaegi or traefik/traefik. See CLAUDE.md." >&2
 	exit "${deny_status:-2}"
 }
 
@@ -48,6 +55,10 @@ claude_hook() {
 		if grep -Eq "push([[:space:]]+-[^[:space:]]+)*[[:space:]]+upstream([[:space:]]|$)|${upstream_slug}" <<<"$cmd"; then
 			deny "git push towards upstream is forbidden."
 		fi
+		# Only URLs: the local checkout path also contains github.com/juliens/go-vm.
+		if grep -Eq "(git@github\.com:|://github\.com/)${old_slug}([^A-Za-z0-9_-]|$)" <<<"$cmd"; then
+			deny "git push towards ${old_slug} (archived) is forbidden; push to origin (${home_slug})."
+		fi
 		if grep -Eq -- '--tags|--follow-tags|refs/tags|--mirror' <<<"$cmd"; then
 			deny "pushing tags is forbidden (it would trigger the release workflow)."
 		fi
@@ -74,8 +85,8 @@ claude_hook() {
 			fi
 		fi
 		# PR creation must name the fork explicitly (gh defaults to the parent repository).
-		if grep -Eq 'gh[[:space:]]+pr[[:space:]]+create' <<<"$cmd" && ! grep -Eq -- '(--repo|-R)[[:space:]=]+juliens/yaegi' <<<"$cmd"; then
-			deny "'gh pr create' must pass '--repo juliens/yaegi' explicitly."
+		if grep -Eq 'gh[[:space:]]+pr[[:space:]]+create' <<<"$cmd" && ! grep -Eq -- "(--repo|-R)[[:space:]=]+${home_slug}([[:space:]]|$)" <<<"$cmd"; then
+			deny "'gh pr create' must pass '--repo ${home_slug}' explicitly."
 		fi
 	fi
 
@@ -107,7 +118,7 @@ commit_msg() {
 pre_push() {
 	deny_status=1
 	local remote="$1" url="$2"
-	if [[ "$remote" == "upstream" || "$url" == *"${upstream_slug}"* ]]; then
+	if [[ "$remote" == "upstream" ]] || grep -Eq "${upstream_slug}|(github\.com[:/])${old_slug}([^A-Za-z0-9_-]|$)" <<<"$url"; then
 		deny "push to '${remote}' (${url}) is forbidden."
 	fi
 	local local_ref local_sha remote_ref remote_sha

@@ -1,108 +1,70 @@
-# yaegi — fork juliens/yaegi
+# yaegi v2 (fork juliens/yaegi): instructions for Claude sessions
 
-This checkout is a **private playground** on the fork `juliens/yaegi`. Everything happens on the fork;
-nothing may be visible from `traefik/yaegi` (the upstream). Read the rules below before any git or gh command.
+Branch `v2` of this fork is yaegi v2: the interpreter formerly named go-vm
+(imported from traefik/go-vm in one commit, without its history; the
+history stays in traefik/go-vm), module `github.com/traefik/yaegi/v2`.
+Branch `master` keeps yaegi v0 (the current releases, v0.x). In the
+comparison docs and tools, "yaegi" alone means yaegi v0 (the reference
+engine, module `github.com/traefik/yaegi`). Nothing is pushed until Julien
+says so.
 
-## Invisibility rules (non-negotiable)
+Answer Julien in French. Code, comments, commit messages and documentation are in English (easy English for non-native readers).
 
-1. **Never write to upstream.** No push, PR, issue, comment, review, label, reaction or `gh api` write on
-   `traefik/yaegi`. Reading upstream (`git fetch upstream`, `gh issue list -R traefik/yaegi`, `gh api` GET) is fine.
-2. **PRs target the fork only**: always `gh pr create --repo juliens/yaegi --base master ...`.
-   `gh` and the GitHub UI default to the parent repository otherwise.
-3. **No cross-references.** In commit messages, PR/issue titles and bodies, never write `#123`, `GH-123`,
-   `traefik/yaegi#123`, or a `github.com/traefik/yaegi/issues|pull/...` URL: each creates a public
-   "referenced this issue" event on upstream and notifies its subscribers. Write `upstream-issue: 123` instead.
-   To reference an issue or PR of the fork itself, always use the fully qualified form `juliens/yaegi#12`
-   (e.g. `Closes juliens/yaegi#12`).
-4. **No @mentions** of anyone.
-5. **No tags, no releases.** A pushed `v*` tag triggers `.github/workflows/release.yml`.
-6. Do not modify the `upstream` remote: its push URL is deliberately invalid.
+**Start here: [README.md](README.md)** (what yaegi v2 is, how it works, modes),
+**[docs/DEVELOPMENT.md](docs/DEVELOPMENT.md)** (layout, build, test, CI, new Go
+releases) **and [TODO.md](TODO.md)** (the open work, by priority). "Continue"
+means: take the first unchecked item of TODO.md, fix it with a regression
+test, then tick it or remove it, and update the numbers of
+[docs/RESULTS.md](docs/RESULTS.md) if they change. The history of the work is in git, not in a journal file.
 
-These rules are enforced by `scripts/fork-guard.sh`:
-- as a Claude Code `PreToolUse` hook on Bash (`.claude/settings.json`), which blocks the offending command;
-- as git `commit-msg` and `pre-push` hooks, installed with `scripts/fork-guard.sh install` (needed once per clone).
-
-If the guard blocks you, fix the command; never work around the guard.
-
-## Environment
-
-- The repository must live at `$GOPATH/src/github.com/traefik/yaegi`: some `_test/` programs import local packages
-  resolved through `build.Default.GOPATH`. Here `GOPATH=/Users/juliensalleyron/dev/go` (set in `.claude/settings.json`;
-  the user's shell default is `~/go`, which makes ~10 `TestFile` cases fail with "not in GOPATH").
-- Go toolchain: current stable (1.26 at the time of writing). The module declares `go 1.21`.
-
-## Commands
+## Setup (fresh clone, local or cloud)
 
 ```bash
-go test ./interp -run 'TestFile/closure0.go'   # one _test program (~seconds)
-go test ./interp                                # full interpreter suite (~8 minutes)
-go test ./...                                   # everything
-go test -race ./interp                          # CI also runs this
-golangci-lint run                               # lint (config in .golangci.yml)
-scripts/oracle.sh prog.go [...]                 # differential check: go run vs yaegi run
-ORACLE_YAEGI_FLAGS=-unsafe scripts/oracle.sh prog.go   # same, for programs using unsafe
-scripts/fork-guard.sh check-file body.md        # check a PR/issue body before publishing it
+sh scripts/setup.sh        # fork-guard git hooks + module downloads (network once) + build/vet
+export GOFLAGS=-mod=readonly GOPROXY=off GOSUMDB=off
 ```
 
-Known local failure: `cmd/yaegi` `TestYaegiCmdCancel` (Ctrl-C on `for {}` / `select {}` kills the process instead of
-being handled). Not yet investigated: may be environmental (macOS, no TTY) or a real bug.
+go.mod and go.sum are tidy: `-mod=readonly` (as in CI) works offline and fails
+on a go.sum change instead of hiding it. `-mod=mod` still works.
 
-## The oracle
+`cmd/runtests` and `cmd/aotcheck` force `GOPROXY=off`: the module cache must be
+filled by `scripts/setup.sh` first. If the sandbox refuses `~/Library/Caches/go-build`,
+set `GOCACHE=$TMPDIR/gocache`.
 
-`scripts/oracle.sh` is the source of truth for correctness: the Go toolchain decides what a program must print,
-not the agent. It compares combined stdout+stderr and success/failure of `go run` and `yaegi run` (built from the
-current tree), normalizing `println` (stderr in gc, stdout in yaegi) and panic trace shapes.
-Output per file: `MATCH`, `DIFF` (with a diff), `GOFAIL` (the program does not even run with `go run`: invalid
-reproducer), `NOFILE`.
+## Layout and commands
 
-A fix is acceptable only if:
-1. the reproducer is `MATCH` under the oracle;
-2. it is added to `_test/` with its expected output (see below) and `go test ./interp` stays green;
-3. `go test -race ./interp` and `golangci-lint run` stay green.
+See [docs/DEVELOPMENT.md](docs/DEVELOPMENT.md) (layout, build, run, test; the
+comparison tools are the separate module `compare/`),
+[docs/ARCHITECTURE.md](docs/ARCHITECTURE.md), [docs/AOTGEN.md](docs/AOTGEN.md),
+[docs/UNSAFE.md](docs/UNSAFE.md), and [compare/yaegi/REPORT.md](compare/yaegi/REPORT.md)
+for what works under yaegi v0 vs yaegi v2.
 
-## Architecture (interp/)
+## Non-negotiable rules
 
-Source → AST → three passes → closure-based execution:
-
-| Step | File | Role |
-|---|---|---|
-| Parse | `ast.go` | go/parser AST → yaegi `node` tree (`kind`, `action`) |
-| Global types/decls | `gta.go` | first pass over package-level declarations (types, funcs, vars) — enables out-of-order declarations |
-| CFG + typing | `cfg.go` | main pass: scopes, type inference, constant folding, control-flow graph (`tnext`/`fnext`) |
-| Type system | `type.go`, `typecheck.go`, `typestring.go` | yaegi `itype`, conversion to `reflect.Type`, checks |
-| Generics | `generic.go` | generic instantiation (by AST rewriting) |
-| Code generation | `run.go` | `genRun`/builders that turn each node into a Go closure (`exec` funcs) |
-| Operators | `op.go` | **generated** by `internal/cmd/genop` — do not edit by hand, edit the generator then `go generate ./interp` |
-| Values | `value.go` | frames and value access |
-| Runtime glue | `interp.go`, `program.go`, `use.go`, `src.go`, `build.go` | public API, import of binary symbols, source loading, build tags |
-
-`stdlib/` holds the generated wrappers exposing the Go standard library (`go1_21_*.go`, `go1_22_*.go`, produced by
-`internal/cmd/extract`). They lag behind the current Go release.
-
-## Tests in `_test/`
-
-Each `_test/*.go` file is a full `package main` program; `TestFile` runs all of them. The **last comment** of the file
-gives the expectation:
-
-```go
-// Output:
-// 12
-```
-
-or, for an expected compile/run error (substring match):
-
-```go
-// Error:
-// 17:11: undefined selector Get
-```
-
-A file without `Output:`/`Error:` is skipped. Name regression tests after the upstream issue: `_test/issue-1634.go`.
-
-## Working conventions
-
-- Follow the Traefik Go conventions (`backend-engineer` skill).
-- One bug = one branch = one PR on the fork: branch `ai/fix-upstream-<N>` or `ai/<topic>`, from `master`.
-- Commit messages: `interp: <what>`, a body explaining the root cause, then `upstream-issue: <N>` when relevant.
-- Keep each change minimal and self-contained so that it can later be proposed upstream as-is.
-- Sync with upstream only by reading: `git fetch upstream && git merge --ff-only upstream/master` (or rebase), then
-  push to `origin`.
+- Nothing may reach traefik/yaegi or traefik/traefik: no push, PR, issue or
+  comment there; no bare `#N`, no `traefik/yaegi#N`, no upstream issue URL, no
+  @mention. Upstream references are written `upstream-issue: N`.
+- `scripts/fork-guard.sh` enforces this (git hooks installed by setup and by the
+  SessionStart hook, PreToolUse hook in `.claude/settings.json`). Never bypass it
+  (`--no-verify`, editing the hooks).
+- The repository is the fork juliens/yaegi. The `upstream` remote
+  (traefik/yaegi) is read-only: its push URL is deliberately invalid, do not
+  change it. juliens/go-vm is an old, archived copy: never push there.
+  References `traefik/go-vm#N` and `juliens/go-vm#N` in the history point to
+  go-vm pull requests and stay as they are.
+- One branch per task (`ai/<slug>` from `v2`), pushed to `origin`
+  (juliens/yaegi) only, and only when Julien allows pushes. No merge into
+  `v2` or `master`, no tags, no force-push, no PR unless Julien asks (then
+  `--repo juliens/yaegi --base v2`).
+- Never loosen a comparison or skip a test to raise a number; one regression
+  test per fix (in `testdata/`, compared with `go run` by `go test`, or in
+  `testdata/aot/`).
+- Before each commit: `go build ./... && go vet ./... && go test ./...`, and
+  `go run ./cmd/runtests -j 8 -timeout 20s -out $TMPDIR/c.tsv -summary $TMPDIR/c.txt`:
+  master `Output:` ≥ 858/868, and no program that passes in
+  `docs/conformance/results.tsv` fails. Update `docs/conformance/` when
+  conformance changes.
+- Commits: existing style (`vm: ...`, a body that explains why), with the
+  trailer `Assisted-by: <model>`.
+- Work that touches traefik/traefik (section 8 of TODO.md) needs Julien's
+  explicit go.
